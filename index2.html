@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100 antialiased select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NationStates Power Sim</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            bg: '#020617',
+                            panel: '#0b1329',
+                            border: '#1e293b',
+                            accent: '#06b6d4',
+                            glow: '#22d3ee',
+                            alert: '#f43f5e'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Consolas', 'Courier New', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #020617; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #06b6d4; }
+        
+        .glow-cyan { filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.7)); }
+        .glow-amber { filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.7)); }
+    </style>
+</head>
+<body class="h-full flex flex-col font-mono bg-cyber-bg text-slate-200 overflow-hidden">
+
+    <!-- Navigation Bar Header -->
+    <header class="h-14 border-b border-cyber-border bg-cyber-panel/90 backdrop-blur px-4 flex items-center justify-between z-20 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="h-3 w-3 rounded-full bg-cyan-400 animate-ping"></div>
+            <h1 class="text-sm font-bold tracking-wider text-cyan-400 uppercase flex items-center gap-2">
+                <span>NationStates</span>
+                <span class="text-slate-600">//</span>
+                <span class="text-slate-100">Regional Power FFA Arena</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">2026 Engine</span>
+            </h1>
+        </div>
+
+        <!-- Simulation Speed Toggles & Controls -->
+        <div class="flex items-center gap-3">
+            <div class="flex items-center bg-slate-900 border border-slate-800 rounded p-1 gap-1 text-xs">
+                <button id="btn-pause" onclick="togglePause()" class="px-3 py-1 rounded hover:bg-slate-800 text-slate-300 transition">Pause</button>
+                <button onclick="singleStep()" class="px-3 py-1 rounded hover:bg-slate-800 text-cyan-400 transition">Step</button>
+                <div class="h-4 w-[1px] bg-slate-800 mx-1"></div>
+                <button id="speed-1" onclick="setSpeed(1)" class="px-2 py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold">1x</button>
+                <button id="speed-2" onclick="setSpeed(2)" class="px-2 py-1 rounded hover:bg-slate-800 text-slate-400">2x</button>
+                <button id="speed-5" onclick="setSpeed(5)" class="px-2 py-1 rounded hover:bg-slate-800 text-slate-400">5x</button>
+            </div>
+
+            <button onclick="resetSimulation()" class="px-3 py-1.5 text-xs rounded bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-700 text-slate-300 hover:text-cyan-400 transition">
+                Reset Arena
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Dashboard -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Tactical Control & Calculator Panel -->
+        <aside class="w-80 border-r border-cyber-border bg-cyber-panel/50 flex flex-col z-10 shrink-0">
+            <!-- Mode Switcher -->
+            <div class="p-3 border-b border-cyber-border bg-slate-900/60">
+                <div class="text-[10px] text-slate-500 uppercase tracking-widest mb-1.5">Simulation Operating Mode</div>
+                <div class="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded border border-slate-800 text-xs">
+                    <button id="mode-auto" onclick="setSimMode('auto')" class="py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold text-center">
+                        Auto FFA
+                    </button>
+                    <button id="mode-commander" onclick="setSimMode('commander')" class="py-1 rounded text-slate-400 hover:text-slate-200 text-center">
+                        Commander
+                    </button>
+                </div>
+            </div>
+
+            <!-- Custom Region Power Calculator Widget -->
+            <div class="p-3 border-b border-cyber-border bg-slate-900/80">
+                <div class="text-[10px] font-bold text-cyan-400 uppercase tracking-widest mb-2 flex items-center justify-between">
+                    <span>🧮 Region Power Calculator</span>
+                </div>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <label class="text-[10px] text-slate-400">WA Nations Count</label>
+                        <input id="calc-wa" type="number" value="350" oninput="calculateCustomPower()" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-400">Delegate Endorsement % (0-100)</label>
+                        <input id="calc-endo" type="number" value="80" max="100" min="0" oninput="calculateCustomPower()" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div class="p-2 bg-cyan-950/40 border border-cyan-800/60 rounded flex justify-between items-center mt-2">
+                        <span class="text-[11px] text-slate-300 font-semibold">Calculated Power:</span>
+                        <span id="calc-result-power" class="text-sm font-bold text-cyan-400">546 PWR</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Commander Strikes Panel -->
+            <div id="commander-controls" class="p-3 border-b border-cyber-border bg-cyan-950/20 hidden">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-cyan-400 uppercase tracking-wider">Commander Console</span>
+                    <span id="ap-display" class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 border border-cyan-700 font-bold">AP: 5 / 5</span>
+                </div>
+                
+                <div id="selected-target-card" class="mb-3 p-2 bg-slate-900/80 rounded border border-slate-800 text-xs">
+                    <div class="text-slate-500 text-[10px]">SELECTED REGION TARGET</div>
+                    <div id="selected-region-name" class="font-bold text-slate-200 truncate">None (Click Map Node)</div>
+                    <div id="selected-region-stats" class="text-[11px] text-slate-400 flex justify-between mt-1">
+                        <span>Power: -</span>
+                        <span>WA: -</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <button onclick="executeCommanderAction('shield')" class="p-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-left transition flex flex-col">
+                        <span class="font-bold text-cyan-400">🛡️ Reinforce Shield</span>
+                        <span class="text-[10px] text-slate-400">+50 Shield (1 AP)</span>
+                    </button>
+                    <button onclick="executeCommanderAction('airstrike')" class="p-2 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-left transition flex flex-col">
+                        <span class="font-bold text-amber-400">⚡ Pulse Discharge</span>
+                        <span class="text-[10px] text-slate-400">Blast Nearby (2 AP)</span>
+                    </button>
+                    <button onclick="executeCommanderAction('nuke')" class="p-2 rounded bg-slate-900 hover:bg-rose-950/50 border border-slate-700 hover:border-rose-800 text-slate-200 text-left transition flex flex-col col-span-2">
+                        <span class="font-bold text-rose-400">🚀 Targeted WA Strike</span>
+                        <span class="text-[10px] text-slate-400">Drain Power & Territory (3 AP)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Regional Leaderboard Header -->
+            <div class="px-3 py-2 border-b border-cyber-border bg-slate-900/40 flex justify-between items-center text-xs">
+                <span class="font-semibold text-slate-400 uppercase tracking-wider">Regions Leaderboard</span>
+                <span id="survivor-count" class="text-[10px] text-cyan-400 font-bold">34 Active</span>
+            </div>
+
+            <!-- Leaderboard List -->
+            <div id="leaderboard-list" class="flex-1 overflow-y-auto divide-y divide-slate-900/60 p-1 text-xs">
+                <!-- Dynamically populated -->
+            </div>
+        </aside>
+
+        <!-- Center Interactive Combat Arena Canvas -->
+        <main class="flex-1 relative bg-cyber-bg flex flex-col overflow-hidden">
+            <!-- Overlay View Controls -->
+            <div class="absolute top-3 left-3 z-10 flex gap-2">
+                <button id="view-territory" onclick="setMapView('territories')" class="px-3 py-1.5 text-xs rounded bg-cyan-900/60 border border-cyan-400 text-cyan-300 font-bold shadow-lg transition">
+                    Territory Grid (WA Proportional)
+                </button>
+                <button id="view-combat" onclick="setMapView('combat')" class="px-3 py-1.5 text-xs rounded bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-slate-200 transition">
+                    Combat Nodes Only
+                </button>
+            </div>
+
+            <!-- Arena Stats Top Bar -->
+            <div class="absolute top-3 right-3 z-10 bg-slate-900/90 border border-slate-800 backdrop-blur px-3 py-1.5 rounded text-xs flex gap-4 text-slate-400">
+                <div>Elapsed Turns: <span id="stat-turns" class="font-bold text-cyan-400">0</span></div>
+                <div>Active Regions: <span id="stat-alive" class="font-bold text-emerald-400">34</span></div>
+                <div>Global Kills: <span id="stat-kills" class="font-bold text-rose-400">0</span></div>
+            </div>
+
+            <!-- Main Canvas Render Box -->
+            <div class="flex-1 relative cursor-crosshair">
+                <canvas id="war-canvas" class="w-full h-full block"></canvas>
+
+                <!-- Floating Killfeed Banner -->
+                <div id="killfeed" class="absolute bottom-4 right-4 pointer-events-none z-20 flex flex-col gap-1 items-end max-w-sm">
+                    <!-- Kill notifications -->
+                </div>
+
+                <!-- Winner Overlay -->
+                <div id="victory-overlay" class="hidden absolute inset-0 bg-slate-950/85 backdrop-blur z-30 flex flex-col items-center justify-center p-6">
+                    <div class="text-xs text-amber-400 font-bold tracking-widest uppercase mb-2">FFA Arena Victor</div>
+                    <div id="winner-name" class="text-3xl font-extrabold text-cyan-400 mb-2">THE NORTH PACIFIC</div>
+                    <div id="winner-stats" class="text-sm text-slate-300 mb-6">Final Power Score: 872 PWR</div>
+                    <button onclick="resetSimulation()" class="px-6 py-2.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm shadow-lg shadow-cyan-950 transition">
+                        Restart Arena Match
+                    </button>
+                </div>
+                
+                <!-- Floating Boundary-Clamped Hover Tooltip -->
+                <div id="tooltip" class="absolute pointer-events-none hidden z-30 bg-slate-900/95 border border-cyan-500/50 p-3 rounded shadow-2xl text-xs max-w-xs backdrop-blur">
+                    <div id="tt-title" class="font-bold text-cyan-300 text-sm border-b border-slate-800 pb-1 mb-1">Region Name</div>
+                    <div id="tt-content" class="space-y-1 text-slate-300"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Battle Logs & Event Feed Panel -->
+        <aside class="w-80 border-l border-cyber-border bg-cyber-panel/50 flex flex-col z-10 shrink-0">
+            <!-- Global FFA Combat Log -->
+            <div class="h-1/2 border-b border-cyber-border flex flex-col">
+                <div class="px-3 py-2 border-b border-cyber-border bg-slate-900/50 flex justify-between items-center text-xs">
+                    <span class="font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="h-2 w-2 rounded-full bg-cyan-400 animate-ping"></span>
+                        FFA Battle Feed
+                    </span>
+                    <button onclick="clearLogs()" class="text-[10px] text-slate-500 hover:text-slate-300">Clear</button>
+                </div>
+                <div id="war-log" class="flex-1 p-3 overflow-y-auto space-y-2 font-mono text-[11px] leading-relaxed">
+                    <!-- Logs dynamically appended -->
+                </div>
+            </div>
+
+            <!-- Statistics & Power Analytics -->
+            <div class="flex-1 flex flex-col p-3 overflow-y-auto space-y-3">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Territory Dominance Share</div>
+
+                <div class="bg-slate-900/80 p-2.5 rounded border border-slate-800 space-y-1.5">
+                    <div class="text-[11px] text-slate-400 flex justify-between">
+                        <span>Top Region Territory Share</span>
+                        <span id="top-share-pct" class="font-bold text-cyan-400">0%</span>
+                    </div>
+                    <div class="w-full h-2 bg-slate-950 rounded-full overflow-hidden flex" id="control-bar">
+                        <!-- Progress segments -->
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/80 p-2.5 rounded border border-slate-800 space-y-1">
+                    <div class="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <span>🗺️ Weighted Voronoi Grid</span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 leading-normal">
+                        Territory expansion is directly calculated from a region's active <b>WA Nations</b> count and <b>Power Rating</b> score in real time.
+                    </div>
+                </div>
+
+                <div class="text-[10px] text-slate-500 leading-normal p-2 border border-slate-900 rounded bg-slate-950">
+                    <span class="font-bold text-slate-400">Power Rating Formula:</span><br>
+                    <code class="text-cyan-400">Power = (WA Nations × 0.6) + (Delegate Votes × 1.2)</code>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- Application Engine JavaScript -->
+    <script>
+        const RAW_NATIONSTATES_DATA = [
+            { name: "The North Pacific", waNations: 892, endorsementPct: 0.76, x: 0.28, y: 0.25 },
+            { name: "Europe", waNations: 698, endorsementPct: 0.77, x: 0.48, y: 0.22 },
+            { name: "the South Pacific", waNations: 679, endorsementPct: 0.86, x: 0.25, y: 0.72 },
+            { name: "The East Pacific", waNations: 584, endorsementPct: 0.76, x: 0.78, y: 0.35 },
+            { name: "The Communist Bloc", waNations: 523, endorsementPct: 0.91, x: 0.62, y: 0.28 },
+            { name: "the Pacific", waNations: 478, endorsementPct: 0.76, x: 0.50, y: 0.50 },
+            { name: "the Rejected Realms", waNations: 425, endorsementPct: 0.54, x: 0.15, y: 0.45 },
+            { name: "the West Pacific", waNations: 414, endorsementPct: 0.92, x: 0.22, y: 0.32 },
+            { name: "Balder", waNations: 408, endorsementPct: 0.66, x: 0.42, y: 0.18 },
+            { name: "Lazarus", waNations: 397, endorsementPct: 0.62, x: 0.35, y: 0.60 },
+            { name: "Osiris", waNations: 350, endorsementPct: 0.62, x: 0.65, y: 0.65 },
+            { name: "The Leftist Assembly", waNations: 338, endorsementPct: 0.78, x: 0.70, y: 0.22 },
+            { name: "Europeia", waNations: 319, endorsementPct: 0.81, x: 0.52, y: 0.36 },
+            { name: "10000 Islands", waNations: 289, endorsementPct: 0.68, x: 0.82, y: 0.60 },
+            { name: "the Plains of Perdition", waNations: 232, endorsementPct: 0.80, x: 0.12, y: 0.78 },
+            { name: "Refugia", waNations: 195, endorsementPct: 0.84, x: 0.88, y: 0.18 },
+            { name: "Concord", waNations: 187, endorsementPct: 0.88, x: 0.38, y: 0.80 },
+            { name: "The Wellspring", waNations: 160, endorsementPct: 0.76, x: 0.55, y: 0.82 },
+            { name: "The League", waNations: 156, endorsementPct: 0.86, x: 0.30, y: 0.85 },
+            { name: "Benigtopia", waNations: 154, endorsementPct: 0.71, x: 0.72, y: 0.78 },
+            { name: "Karma", waNations: 138, endorsementPct: 0.94, x: 0.18, y: 0.15 },
+            { name: "Conch Kingdom", waNations: 134, endorsementPct: 0.81, x: 0.85, y: 0.45 },
+            { name: "Talonia", waNations: 122, endorsementPct: 0.83, x: 0.60, y: 0.42 },
+            { name: "Carcassonne", waNations: 119, endorsementPct: 0.88, x: 0.45, y: 0.30 },
+            { name: "the Outback", waNations: 118, endorsementPct: 0.62, x: 0.75, y: 0.88 },
+            { name: "The Kodiak Republic", waNations: 114, endorsementPct: 0.86, x: 0.10, y: 0.22 },
+            { name: "Thaecia", waNations: 113, endorsementPct: 0.87, x: 0.32, y: 0.42 },
+            { name: "Ridgefield", waNations: 109, endorsementPct: 0.78, x: 0.68, y: 0.50 },
+            { name: "Greater Hanguardian Islands", waNations: 109, endorsementPct: 0.86, x: 0.90, y: 0.75 },
+            { name: "Wintreath", waNations: 105, endorsementPct: 0.70, x: 0.20, y: 0.62 },
+            { name: "Christians", waNations: 104, endorsementPct: 0.88, x: 0.48, y: 0.70 },
+            { name: "United Kingdom", waNations: 96, endorsementPct: 0.70, x: 0.42, y: 0.25 },
+            { name: "Democratic Socialist Assembly", waNations: 92, endorsementPct: 0.82, x: 0.78, y: 0.15 },
+            { name: "The Region That Has No Big Banks", waNations: 92, endorsementPct: 0.80, x: 0.08, y: 0.60 }
+        ];
+
+        const COLOR_PALETTE = [
+            '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', 
+            '#ec4899', '#f43f5e', '#ef4444', '#f97316', '#f59e0b', 
+            '#10b981', '#14b8a6', '#0284c7', '#4f46e5', '#9333ea', 
+            '#c026d3', '#db2777', '#e11d48', '#d97706', '#059669'
+        ];
+
+        const state = {
+            regions: [],
+            selectedRegionId: null,
+            simMode: 'auto',
+            mapView: 'territories', // 'territories' or 'combat'
+            paused: false,
+            speed: 1,
+            turns: 0,
+            kills: 0,
+            actionPoints: 5,
+            lasers: [],
+            particles: [],
+            shockwaves: [],
+            hoveredRegionId: null,
+            gameOver: false
+        };
+
+        let canvas, ctx;
+
+        window.addEventListener('load', () => {
+            canvas = document.getElementById('war-canvas');
+            ctx = canvas.getContext('2d');
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            canvas.addEventListener('mousemove', handleCanvasMouseMove);
+            canvas.addEventListener('click', handleCanvasClick);
+            canvas.addEventListener('mouseleave', () => {
+                document.getElementById('tooltip').classList.add('hidden');
+                state.hoveredRegionId = null;
+            });
+
+            initRegionsData();
+            calculateCustomPower();
+            startSimulationLoop();
+            logEvent("FFA ARENA", "Free-For-All Regional Battle initialized.", "cyan");
+        });
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+
+        function initRegionsData() {
+            state.regions = RAW_NATIONSTATES_DATA.map((data, index) => {
+                const delVotes = Math.round(data.waNations * data.endorsementPct);
+                const basePower = Math.round((data.waNations * 0.6) + (delVotes * 1.2));
+                return {
+                    id: index,
+                    name: data.name,
+                    waNations: data.waNations,
+                    endorsementPct: data.endorsementPct,
+                    delVotes: delVotes,
+                    color: COLOR_PALETTE[index % COLOR_PALETTE.length],
+                    xPct: data.x,
+                    yPct: data.y,
+                    alive: true,
+                    shield: 0,
+                    power: basePower,
+                    kills: 0
+                };
+            });
+
+            state.turns = 0;
+            state.kills = 0;
+            state.selectedRegionId = null;
+            state.actionPoints = 5;
+            state.gameOver = false;
+            document.getElementById('victory-overlay').classList.add('hidden');
+            updateLeaderboardUI();
+            updateStatsUI();
+        }
+
+        function calculateCustomPower() {
+            const wa = parseInt(document.getElementById('calc-wa').value) || 0;
+            const endoPct = (parseFloat(document.getElementById('calc-endo').value) || 0) / 100;
+            const delVotes = Math.round(wa * endoPct);
+            const calculatedPower = Math.round((wa * 0.6) + (delVotes * 1.2));
+            document.getElementById('calc-result-power').innerText = `${calculatedPower.toLocaleString()} PWR`;
+        }
+
+        let lastTickTime = 0;
+        function startSimulationLoop() {
+            function loop(timestamp) {
+                if (!lastTickTime) lastTickTime = timestamp;
+                const delta = timestamp - lastTickTime;
+
+                if (!state.paused && !state.gameOver && delta > (1000 / state.speed)) {
+                    simulationTick();
+                    lastTickTime = timestamp;
+                }
+
+                renderCanvas();
+                requestAnimationFrame(loop);
+            }
+            requestAnimationFrame(loop);
+        }
+
+        function simulationTick() {
+            state.turns++;
+            state.actionPoints = Math.min(5, state.actionPoints + 1);
+
+            // Execute FFA Combat Rounds
+            if (state.simMode === 'auto' || Math.random() < 0.7) {
+                executeFFACombat();
+            }
+
+            checkVictory();
+            updateLeaderboardUI();
+            updateStatsUI();
+        }
+
+        function executeFFACombat() {
+            const aliveRegions = state.regions.filter(r => r.alive);
+            if (aliveRegions.length < 2) return;
+
+            const attacker = aliveRegions[Math.floor(Math.random() * aliveRegions.length)];
+            const targets = aliveRegions.filter(r => r.id !== attacker.id);
+            if (targets.length === 0) return;
+
+            targets.sort((a, b) => {
+                const distA = Math.hypot(a.xPct - attacker.xPct, a.yPct - attacker.yPct);
+                const distB = Math.hypot(b.xPct - attacker.xPct, b.yPct - attacker.yPct);
+                return distA - distB;
+            });
+
+            const defender = targets[0];
+            addLaserEffect(attacker, defender);
+
+            const damage = Math.round(15 + Math.random() * 25);
+            if (defender.shield > 0) {
+                defender.shield = Math.max(0, defender.shield - damage);
+                logEvent("SHIELD ABSORB", `${attacker.name} struck ${defender.name} (Shield absorbed damage).`, "cyan");
+            } else {
+                defender.waNations = Math.max(0, defender.waNations - damage);
+                attacker.waNations += Math.round(damage * 0.5); // Conqueror gains WA strength
+
+                defender.delVotes = Math.round(defender.waNations * defender.endorsementPct);
+                attacker.delVotes = Math.round(attacker.waNations * attacker.endorsementPct);
+
+                defender.power = Math.round((defender.waNations * 0.6) + (defender.delVotes * 1.2));
+                attacker.power = Math.round((attacker.waNations * 0.6) + (attacker.delVotes * 1.2));
+
+                logEvent("TERRITORY STRIKE", `${attacker.name} struck ${defender.name} (-${damage} WA).`, "rose");
+                addParticleExplosion(defender, false, defender.color);
+
+                if (defender.waNations <= 0) {
+                    attacker.kills++;
+                    eliminateRegion(defender, attacker.name);
+                }
+            }
+        }
+
+        function eliminateRegion(region, killerName) {
+            region.alive = false;
+            region.power = 0;
+            region.waNations = 0;
+            state.kills++;
+            addShockwave(region);
+            addParticleExplosion(region, true, '#f43f5e');
+            
+            showKillfeed(`${killerName} ➔ ${region.name}`);
+            logEvent("REGION ELIMINATED", `${region.name} territory was completely annexed by ${killerName}!`, "rose");
+        }
+
+        function checkVictory() {
+            const alive = state.regions.filter(r => r.alive);
+            if (alive.length === 1 && !state.gameOver) {
+                state.gameOver = true;
+                const winner = alive[0];
+                document.getElementById('winner-name').innerText = winner.name;
+                document.getElementById('winner-stats').innerText = `Final Power Score: ${winner.power} PWR | Total Kills: ${winner.kills}`;
+                document.getElementById('victory-overlay').classList.remove('hidden');
+                logEvent("ARENA CHAMPION", `${winner.name} achieved total global hegemony!`, "amber");
+            }
+        }
+
+        function executeCommanderAction(actionType) {
+            if (state.selectedRegionId === null) {
+                alert("Select a region target on the map first!");
+                return;
+            }
+            const target = state.regions.find(r => r.id === state.selectedRegionId);
+            if (!target || !target.alive) return;
+
+            if (actionType === 'shield') {
+                if (state.actionPoints < 1) return;
+                state.actionPoints -= 1;
+                target.shield += 50;
+                logEvent("COMMAND", `Reinforced shield fields (+50 Shield) on ${target.name}.`, "cyan");
+            } else if (actionType === 'airstrike') {
+                if (state.actionPoints < 2) return;
+                state.actionPoints -= 2;
+                state.regions.filter(r => r.alive && r.id !== target.id).forEach(r => {
+                    if (Math.hypot(r.xPct - target.xPct, r.yPct - target.yPct) < 0.25) {
+                        r.waNations = Math.max(0, r.waNations - 25);
+                        r.delVotes = Math.round(r.waNations * r.endorsementPct);
+                        r.power = Math.round((r.waNations * 0.6) + (r.delVotes * 1.2));
+                        addParticleExplosion(r, false, '#f59e0b');
+                    }
+                });
+                addShockwave(target);
+                logEvent("COMMAND", `Pulse Discharge triggered near ${target.name}.`, "amber");
+            } else if (actionType === 'nuke') {
+                if (state.actionPoints < 3) return;
+                state.actionPoints -= 3;
+                eliminateRegion(target, "Commander Orbital Strike");
+            }
+
+            updateCommanderUI();
+            updateStatsUI();
+        }
+
+        function renderCanvas() {
+            if (!ctx) return;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Tech Grid
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < w; x += 40) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+            }
+            for (let y = 0; y < h; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+
+            // Proportional Territory Voronoi Engine
+            if (state.mapView === 'territories') {
+                renderProportionalTerritories(w, h);
+            }
+
+            // Shockwave Explosions
+            for (let i = state.shockwaves.length - 1; i >= 0; i--) {
+                const s = state.shockwaves[i];
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(244, 63, 94, ${s.alpha})`;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                s.radius += 3;
+                s.alpha -= 0.03;
+                if (s.alpha <= 0) state.shockwaves.splice(i, 1);
+            }
+
+            // Dynamic Beam Lasers
+            for (let i = state.lasers.length - 1; i >= 0; i--) {
+                const l = state.lasers[i];
+                
+                // Outer glow beam
+                ctx.beginPath();
+                ctx.moveTo(l.x1 * w, l.y1 * h);
+                ctx.lineTo(l.x2 * w, l.y2 * h);
+                ctx.strokeStyle = `rgba(6, 182, 212, ${l.alpha * 0.4})`;
+                ctx.lineWidth = 8;
+                ctx.stroke();
+
+                // Core crisp laser beam
+                ctx.beginPath();
+                ctx.moveTo(l.x1 * w, l.y1 * h);
+                ctx.lineTo(l.x2 * w, l.y2 * h);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${l.alpha})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                l.alpha -= 0.06;
+                if (l.alpha <= 0) state.lasers.splice(i, 1);
+            }
+
+            // Particles
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                const p = state.particles[i];
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.alpha;
+                ctx.fill();
+
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= 0.02;
+                if (p.alpha <= 0) state.particles.splice(i, 1);
+            }
+            ctx.globalAlpha = 1.0;
+
+            // Region Nodes
+            state.regions.forEach(r => {
+                if (!r.alive) return;
+
+                const rx = r.xPct * w;
+                const ry = r.yPct * h;
+                const radius = Math.max(9, Math.min(30, Math.sqrt(r.power) * 0.75));
+
+                if (r.id === state.selectedRegionId) {
+                    ctx.beginPath();
+                    ctx.arc(rx, ry, radius + 8, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#22d3ee';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                }
+
+                ctx.beginPath();
+                ctx.arc(rx, ry, radius, 0, Math.PI * 2);
+                ctx.fillStyle = r.color;
+                ctx.fill();
+                ctx.strokeStyle = '#0284c7';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Shield Field
+                if (r.shield > 0) {
+                    ctx.beginPath();
+                    ctx.arc(rx, ry, radius + 5, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#06b6d4';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = '10px JetBrains Mono, monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(r.name, rx, ry + radius + 12);
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = '9px JetBrains Mono, monospace';
+                ctx.fillText(`${r.power} PWR (${r.waNations} WA)`, rx, ry + radius + 22);
+            });
+        }
+
+        // Proportional Weighted Voronoi Grid
+        function renderProportionalTerritories(w, h) {
+            const step = 14;
+            const activeRegions = state.regions.filter(r => r.alive && r.waNations > 0);
+            if (activeRegions.length === 0) return;
+
+            for (let x = 0; x < w; x += step) {
+                for (let y = 0; y < h; y += step) {
+                    let closestDist = Infinity;
+                    let closestRegion = null;
+
+                    for (let r of activeRegions) {
+                        // Territory weighting proportional to WA Nations count
+                        const weight = Math.max(1, r.waNations);
+                        const dist = Math.hypot(x - r.xPct * w, y - r.yPct * h) / (Math.sqrt(weight) * 0.12);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closestRegion = r;
+                        }
+                    }
+
+                    if (closestRegion && closestDist < 140) {
+                        ctx.fillStyle = closestRegion.color;
+                        ctx.globalAlpha = Math.max(0, 0.18 - (closestDist / 140) * 0.18);
+                        ctx.fillRect(x, y, step, step);
+                    }
+                }
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        function addLaserEffect(r1, r2) {
+            state.lasers.push({ x1: r1.xPct, y1: r1.yPct, x2: r2.xPct, y2: r2.yPct, alpha: 1.0 });
+        }
+
+        function addShockwave(region) {
+            const w = canvas.width;
+            const h = canvas.height;
+            state.shockwaves.push({ x: region.xPct * w, y: region.yPct * h, radius: 10, alpha: 1.0 });
+        }
+
+        function addParticleExplosion(region, isBig = false, customColor = '#06b6d4') {
+            const w = canvas.width;
+            const h = canvas.height;
+            for (let i = 0; i < (isBig ? 35 : 12); i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 4;
+                state.particles.push({
+                    x: region.xPct * w, y: region.yPct * h,
+                    vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                    radius: 2 + Math.random() * 3, color: customColor, alpha: 1.0
+                });
+            }
+        }
+
+        function showKillfeed(msg) {
+            const container = document.getElementById('killfeed');
+            const item = document.createElement('div');
+            item.className = "bg-rose-950/90 border border-rose-700 text-rose-200 px-3 py-1 rounded text-xs font-bold animate-bounce";
+            item.innerText = `💥 ${msg}`;
+            container.appendChild(item);
+            setTimeout(() => item.remove(), 4000);
+        }
+
+        function handleCanvasMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            let hovered = null;
+            state.regions.forEach(r => {
+                if (!r.alive) return;
+                const rx = r.xPct * w;
+                const ry = r.yPct * h;
+                if (Math.hypot(mx - rx, my - ry) < 25) hovered = r;
+            });
+
+            const tt = document.getElementById('tooltip');
+            if (hovered) {
+                state.hoveredRegionId = hovered.id;
+                document.getElementById('tt-title').innerText = hovered.name;
+                document.getElementById('tt-content').innerHTML = `
+                    <div class="flex justify-between"><span>Power Rating:</span> <span class="font-bold text-cyan-400">${hovered.power} PWR</span></div>
+                    <div class="flex justify-between"><span>WA Nations:</span> <span class="font-bold text-slate-200">${hovered.waNations}</span></div>
+                    <div class="flex justify-between"><span>Delegate Votes:</span> <span class="font-bold text-purple-400">${hovered.delVotes}</span></div>
+                    <div class="flex justify-between"><span>Kills / Claims:</span> <span class="font-bold text-rose-400">${hovered.kills}</span></div>
+                `;
+
+                tt.style.left = `${e.clientX + 15}px`;
+                tt.style.top = `${e.clientY + 15}px`;
+                tt.classList.remove('hidden');
+            } else {
+                state.hoveredRegionId = null;
+                tt.classList.add('hidden');
+            }
+        }
+
+        function handleCanvasClick() {
+            if (state.hoveredRegionId !== null) {
+                state.selectedRegionId = state.hoveredRegionId;
+                updateCommanderUI();
+            }
+        }
+
+        function updateCommanderUI() {
+            document.getElementById('ap-display').innerText = `AP: ${state.actionPoints} / 5`;
+            const targetNameEl = document.getElementById('selected-region-name');
+            const targetStatsEl = document.getElementById('selected-region-stats');
+
+            if (state.selectedRegionId !== null) {
+                const r = state.regions.find(reg => reg.id === state.selectedRegionId);
+                if (r) {
+                    targetNameEl.innerText = r.name;
+                    targetStatsEl.innerHTML = `<span>Power: ${r.power} PWR</span><span>WA: ${r.waNations}</span>`;
+                }
+            } else {
+                targetNameEl.innerText = "None (Click Map Node)";
+                targetStatsEl.innerHTML = `<span>Power: -</span><span>WA: -</span>`;
+            }
+        }
+
+        function setSimMode(mode) {
+            state.simMode = mode;
+            document.getElementById('mode-auto').className = mode === 'auto' ? "py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold text-center" : "py-1 rounded text-slate-400 hover:text-slate-200 text-center";
+            document.getElementById('mode-commander').className = mode === 'commander' ? "py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold text-center" : "py-1 rounded text-slate-400 hover:text-slate-200 text-center";
+            document.getElementById('commander-controls').classList.toggle('hidden', mode === 'auto');
+        }
+
+        function setMapView(view) {
+            state.mapView = view;
+            const btn1 = document.getElementById('view-territory');
+            const btn2 = document.getElementById('view-combat');
+
+            const active = "px-3 py-1.5 text-xs rounded bg-cyan-900/60 border border-cyan-400 text-cyan-300 font-bold shadow-lg transition";
+            const inactive = "px-3 py-1.5 text-xs rounded bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-slate-200 transition";
+
+            btn1.className = view === 'territories' ? active : inactive;
+            btn2.className = view === 'combat' ? active : inactive;
+        }
+
+        function setSpeed(spd) {
+            state.speed = spd;
+            [1, 2, 5].forEach(s => {
+                document.getElementById(`speed-${s}`).className = s === spd ? "px-2 py-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold" : "px-2 py-1 rounded hover:bg-slate-800 text-slate-400";
+            });
+        }
+
+        function togglePause() {
+            state.paused = !state.paused;
+            document.getElementById('btn-pause').innerText = state.paused ? 'Resume' : 'Pause';
+        }
+
+        function singleStep() { simulationTick(); renderCanvas(); }
+        function resetSimulation() { initRegionsData(); }
+
+        function updateLeaderboardUI() {
+            const list = document.getElementById('leaderboard-list');
+            const sorted = [...state.regions].sort((a, b) => b.power - a.power);
+
+            list.innerHTML = sorted.map((r, i) => `
+                <div class="p-2 flex items-center justify-between ${r.alive ? 'hover:bg-slate-900/50 cursor-pointer' : 'opacity-40 bg-slate-950'} ${r.id === state.selectedRegionId ? 'bg-cyan-950/40 border-l-2 border-cyan-400' : ''}" onclick="if(${r.alive}){state.selectedRegionId = ${r.id}; updateCommanderUI();}">
+                    <div class="flex items-center gap-2 truncate">
+                        <span class="text-[10px] text-slate-500 w-4 font-bold">#${i + 1}</span>
+                        <div class="h-2 w-2 rounded-full" style="background-color: ${r.color}"></div>
+                        <span class="font-bold ${r.alive ? 'text-slate-200' : 'line-through text-slate-500'} truncate">${r.name}</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold ${r.alive ? 'text-cyan-400' : 'text-slate-600'}">${r.power} <span class="text-[9px] text-slate-500">PWR</span></div>
+                        <div class="text-[9px] text-slate-500">${r.waNations} WA | ${r.kills} Kills</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStatsUI() {
+            const aliveCount = state.regions.filter(r => r.alive).length;
+            document.getElementById('stat-turns').innerText = state.turns;
+            document.getElementById('stat-alive').innerText = aliveCount;
+            document.getElementById('stat-kills').innerText = state.kills;
+            document.getElementById('survivor-count').innerText = `${aliveCount} Active Regions`;
+
+            const sorted = [...state.regions].sort((a, b) => b.power - a.power);
+            const totalPower = state.regions.reduce((sum, r) => sum + r.power, 0);
+            const topPower = sorted[0] ? sorted[0].power : 0;
+            const share = totalPower > 0 ? Math.round((topPower / totalPower) * 100) : 0;
+            document.getElementById('top-share-pct').innerText = `${share}%`;
+
+            const controlBar = document.getElementById('control-bar');
+            controlBar.innerHTML = sorted.slice(0, 5).map(r => {
+                const pct = totalPower > 0 ? (r.power / totalPower) * 100 : 0;
+                return `<div class="h-full" style="width: ${pct}%; background-color: ${r.color}"></div>`;
+            }).join('');
+        }
+
+        function logEvent(type, msg, color = 'slate') {
+            const logBox = document.getElementById('war-log');
+            const entry = document.createElement('div');
+            entry.className = `p-1.5 rounded border-l-2 bg-slate-950/60 text-${color}-400 border-${color}-900`;
+            entry.innerHTML = `<span class="font-bold text-[10px] opacity-75">[${type}]</span> ${msg}`;
+            logBox.appendChild(entry);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function clearLogs() { document.getElementById('war-log').innerHTML = ''; }
+    </script>
+</body>
+</html>
